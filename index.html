@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Cluedo SQL - Enquête IT</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.6.2/sql-wasm.js"></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f2f2f2;
+    }
+
+    header {
+      background: #333;
+      color: white;
+      padding: 1em;
+      text-align: center;
+    }
+
+    .container {
+      padding: 1em;
+      max-width: 960px;
+      margin: auto;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 1em;
+      margin-bottom: 1em;
+    }
+
+    .tab {
+      cursor: pointer;
+      padding: 0.5em 1em;
+      background: #ddd;
+      border-radius: 4px;
+    }
+
+    .tab.active {
+      background: #333;
+      color: white;
+    }
+
+    .tab-content {
+      display: none;
+      padding: 1em;
+      background: white;
+      border-radius: 4px;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    textarea {
+      width: 100%;
+      height: 100px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1em;
+    }
+
+    th,
+    td {
+      border: 1px solid #aaa;
+      padding: 0.5em;
+      text-align: left;
+    }
+
+    .result {
+      background: #dff0d8;
+      padding: 1em;
+      margin-top: 1em;
+      border: 1px solid #3c763d;
+      border-radius: 4px;
+    }
+
+    .error {
+      background: #f2dede;
+      color: #a94442;
+      padding: 1em;
+      margin-top: 1em;
+      border: 1px solid #ebccd1;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>🕵️ Enquête SQL - L'intrusion fantôme</h1>
+    <p>
+      Un appel d’un client Sandvik secoue l’après-midi tranquille de l’équipe IT : il cherche des plans techniques
+      partagés la veille via SharePoint… mais ils ont disparu. Même la corbeille est vide. Panique dans les rangs
+      !<br />
+      Après vérification, l’équipe découvre qu’un malware a été injecté depuis un poste administrateur, supprimant tous
+      les fichiers du site. Aucun log d’accès anormal… juste un trou béant dans les données entre 14h15 et
+      14h20.<br />
+      L’administrateur IT en poste ce jour-là admet avoir quitté son bureau pour une réunion RH sans verrouiller son
+      poste… ni même fermer la porte du bureau IT. Une faille humaine exploitée ?<br />
+      Votre mission : interrogez les tables, croisez les alibis, et trouvez le coupable.
+    </p>
+  </header>
+
+  <div class="container">
+    <div class="tabs">
+      <div class="tab active" data-tab="requete">SQL</div>
+      <div class="tab" data-tab="suspects">Suspects</div>
+      <div class="tab" data-tab="lieux">Lieux</div>
+      <div class="tab" data-tab="outils">Outils</div>
+      <div class="tab" data-tab="actions">Actions</div>
+      <div class="tab" data-tab="valider">Valider</div>
+    </div>
+
+    <div class="tab-content active" id="requete">
+      <p>✍️ Saisissez une requête SQL pour interroger la base :</p>
+      <textarea id="sql"></textarea>
+      <button onclick="executerRequete()">▶️ Exécuter</button>
+      <div id="resultats"></div>
+    </div>
+
+    <div class="tab-content" id="suspects">
+      <p>👨‍💼 Liste des suspects avec leurs alibis, badges et équipes :</p>
+      <pre>SELECT * FROM suspects;</pre>
+    </div>
+
+    <div class="tab-content" id="lieux">
+      <p>🏛️ Lieux potentiels et leurs badges d'accès :</p>
+      <pre>SELECT * FROM lieux;</pre>
+    </div>
+
+    <div class="tab-content" id="outils">
+      <p>🛠️ Liste des outils informatiques :</p>
+      <pre>SELECT * FROM outils;</pre>
+    </div>
+
+    <div class="tab-content" id="actions">
+      <p>📋 Liste des actions effectuées :</p>
+      <pre>SELECT * FROM actions;</pre>
+    </div>
+
+    <div class="tab-content" id="valider">
+      <p>🔍 Entrez vos réponses :</p>
+      <label>Suspect :</label><br />
+      <input type="text" id="reponse_suspect"><br />
+      <label>Lieu :</label><br />
+      <input type="text" id="reponse_lieu"><br />
+      <label>Outil :</label><br />
+      <input type="text" id="reponse_outil"><br />
+      <button onclick="validerEnquete()">✅ Valider l'enquête</button>
+      <div id="feedback"></div>
+    </div>
+  </div>
+
+  <script>
+    let db;
+    let SQL;
+
+    document.querySelectorAll(".tab").forEach(tab => {
+      tab.addEventListener("click", () => {
+        document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+        document.querySelectorAll(".tab-content").forEach(tc => tc.classList.remove("active"));
+        tab.classList.add("active");
+        document.getElementById(tab.dataset.tab).classList.add("active");
+      });
+    });
+
+    const executerRequete = () => {
+      const sql = document.getElementById("sql").value;
+      const resultats = document.getElementById("resultats");
+      try {
+        const res = db.exec(sql);
+        if (res.length === 0) return resultats.innerHTML = "<p>Aucune donnée retournée.</p>";
+        const html = res.map(table => {
+          const headers = table.columns.map(col => `<th>${col}</th>`).join("");
+          const rows = table.values.map(row => `<tr>${row.map(cell => `<td>${cell}</td>`).join("")}</tr>`).join("");
+          return `<table><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table>`;
+        }).join("");
+        resultats.innerHTML = html;
+      } catch (e) {
+        resultats.innerHTML = `<div class="error">Erreur : ${e.message}</div>`;
+      }
+    };
+
+    const validerEnquete = () => {
+      const s = document.getElementById("reponse_suspect").value.trim().toLowerCase();
+      const l = document.getElementById("reponse_lieu").value.trim().toLowerCase();
+      const o = document.getElementById("reponse_outil").value.trim().toLowerCase();
+      const feedback = document.getElementById("feedback");
+
+      if (s === "théo" && l.includes("bureau it") && o.includes("usb")) {
+        feedback.innerHTML = "<div class='result'>✅ Bonne réponse ! Le coupable est Théo, dans le Bureau IT, avec la Clé USB Kingston.</div>";
+      } else {
+        feedback.innerHTML = "<div class='error'>❌ Mauvaise réponse. Essayez encore !</div>";
+      }
+    };
+
+    initSqlJs({ locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.6.2/${file}` }).then(SQLLib => {
+      SQL = SQLLib;
+      fetch("cluedo_it_investigation.db") // nom du fichier sqlite à placer à la racine
+        .then(res => res.arrayBuffer())
+        .then(buffer => {
+          db = new SQL.Database(new Uint8Array(buffer));
+        });
+    });
+  </script>
+</body>
+
+</html>
